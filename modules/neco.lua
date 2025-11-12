@@ -119,15 +119,15 @@ function neco:LoadPlugin(name)
     end
 
     local pluginPath = path.join(pluginsFolder, name)
-    local initPath = path.join(pluginPath, 'init.lua')
+    local metaPath = path.join(pluginPath, 'meta.lua')
     local mainPath = path.join(pluginPath, 'main.lua')
 
     if not fs.existsSync(pluginPath) then
         error('Plugin '..name..' does not exist.')
     end
 
-    if not fs.existsSync(initPath) then
-        error('Plugin '..name..' is corrupted: init.lua does not exist.')
+    if not fs.existsSync(metaPath) then
+        error('Plugin '..name..' is corrupted: meta.lua does not exist.')
     end
 
     if not fs.existsSync(mainPath) then
@@ -136,22 +136,22 @@ function neco:LoadPlugin(name)
 
     local sandbox = makeSandboxEnv(name)
 
-    -- Load and run init.lua (should return info table)
-    local init_fn, err = loadSandboxedChunk(initPath, sandbox)
-    if not init_fn then
-        log('ERROR', 'Failed to load init.lua for plugin', name, ':', err)
+    -- Load and run meta.lua (should return info table)
+    local meta_fn, err = loadSandboxedChunk(metaPath, sandbox)
+    if not meta_fn then
+        log('ERROR', 'Failed to load meta.lua for plugin', name, ':', err)
         return nil, err
     end
 
-    local ok, info_or_err = pcall(init_fn)
+    local ok, info_or_err = pcall(meta_fn)
     if not ok then
-        log('ERROR', ('Runtime error in init.lua for plugin %s: %s'):format(name, tostring(info_or_err)))
+        log('ERROR', ('Runtime error in meta.lua for plugin %s: %s'):format(name, tostring(info_or_err)))
         return nil, info_or_err
     end
 
     local info = info_or_err
     if type(info) ~= 'table' then
-        log('WARN', ('init.lua for plugin %s did not return a table. Using minimal info.'):format(name))
+        log('WARN', ('meta.lua for plugin %s did not return a table. Using minimal info.'):format(name))
         info = { name = name }
     end
 

@@ -3,8 +3,18 @@ local json = require('json')
 local fs = require('fs')
 local timer = require('timer')
 
+local services = require('./modules/services')
+services.NewService('TestService', {
+
+    Test = function (self, param)
+        
+        print('TEST: '..tostring(param))
+
+    end
+
+})
 local core = {}
-core.version = 2.5
+core.version = 2.65
 
 local dbFile = './storage/db/db.json'
 
@@ -550,6 +560,10 @@ end
 
 function core.returnUserHasRole(...)
     return returnUserHasRole(...)
+end
+
+function core:getService(sn)
+    return services.GetService(sn)
 end
 
 local adminRole = getRoleById(1)

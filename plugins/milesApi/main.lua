@@ -1,3 +1,5 @@
+-- API Library Plugin Example
+
 local milesApi = {}
 
 function milesApi.test()

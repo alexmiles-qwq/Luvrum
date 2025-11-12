@@ -1,3 +1,5 @@
+-- Plugin Example
+
 local function logo()
     local strs = {}
     strs[1] = '        .__                 '
@@ -20,9 +22,10 @@ local function logo()
     print(ansi.gradientBackground('   Plugin for luvit forum   ', {255, 0, 0}, {0,0,255}).. '\n')
 end
 
-local function main()
+local function main()   -- Main function. Its recomended to call main functon on All Plugins Loaded Event Fired.
     
-    local milesApi = require('milesApi')
+    local TestService = core:getService('TestService')
+    local milesApi = require('milesApi')    -- Other pluigns accessable from the require.
     if not milesApi then
         print('ERROR: MilesApi is missing.')
         return
@@ -33,6 +36,7 @@ local function main()
     end)
     
     logo()
+
 end
 
 
