@@ -1,6 +1,5 @@
 # Ignore log files and storage data
 logs/
-storage/
 
 # Optional common ignores
 *.log
