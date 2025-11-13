@@ -24,6 +24,8 @@ local neco = require('./modules/neco')
 _G.core = require('./modules/core')
 _G.web = require('./modules/web')
 
+niko:Log('Running Luvrum v'..tostring(core.version))
+
 neco:LoadAllPlugins()
 
 -- niko:Log( ansi.customColor(10,125,115).. 'Web server is running on http://127.0.0.1:80' .. ansi.color.reset, 'Main-Web', 2)

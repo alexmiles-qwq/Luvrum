@@ -4,6 +4,6 @@ return {
     version = 25565,
     description = 'Test Plugin for Luvit Forum',
     author = 'alexmiles-qwq',
-    requiredVersion = 1
+    -- requiredVersion = 1 -- not implemented yet
 
 }

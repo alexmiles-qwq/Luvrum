@@ -22,9 +22,10 @@ local function logo()
     print(ansi.gradientBackground('   Plugin for luvit forum   ', {255, 0, 0}, {0,0,255}).. '\n')
 end
 
-local function main()   -- Main function. Its recomended to call main functon on All Plugins Loaded Event Fired.
+local function main()   -- Main function. Its recomended to call main functon on All Plugins Loaded Event Fired, when all plugins / libraries are preloaded.
     
     local TestService = core:getService('TestService')
+    local serverVer = core.version  -- You can check for version
     local milesApi = require('milesApi')    -- Other pluigns accessable from the require.
     if not milesApi then
         print('ERROR: MilesApi is missing.')

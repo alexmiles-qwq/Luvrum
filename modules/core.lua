@@ -2,17 +2,8 @@
 local json = require('json')
 local fs = require('fs')
 local timer = require('timer')
-
 local services = require('./modules/services')
-services.NewService('TestService', {
 
-    Test = function (self, param)
-        
-        print('TEST: '..tostring(param))
-
-    end
-
-})
 local core = {}
 core.version = 2.65
 
@@ -92,21 +83,58 @@ local function saveDB()
     end)
 end
 
+-- Multiple token support (and migration ??)
 local function loadDB()
     local content = fs.readFileSync(dbFile)
     if content then
         db = json.decode(content)
+
+        if db and db.users then
+            for _, user in ipairs(db.users) do
+                if user.token and (type(user.tokens) ~= "table" or #user.tokens == 0) then
+                    user.tokens = {
+                        {
+                            token = user.token,
+                            issuedAt = user.timestamp or os.time(),
+                            ip = user.lastLoginIP or 'unknown',
+                            device = user.lastLoginUA or 'unknown'
+                        }
+                    }
+                    user.token = nil
+                end
+
+                if type(user.tokens) == "table" then
+                    for i = #user.tokens, 1, -1 do
+                        if type(user.tokens[i]) == "string" then
+                            local oldTok = user.tokens[i]
+                            user.tokens[i] = {
+                                token = oldTok,
+                                issuedAt = user.timestamp or os.time(),
+                                ip = 'unknown',
+                                device = 'unknown'
+                            }
+                        elseif type(user.tokens[i]) ~= "table" then
+                            table.remove(user.tokens, i)
+                        end
+                    end
+                else
+                    user.tokens = {}
+                end
+            end
+        end
     end
 
     onDatabaseLoadedFire(content ~= nil)
 end
 
+
+
 local function generateToken()
     return keygen:GenerateKey()
 end
 
+-- createUser now initializes tokens as an empty array (multiple tokens supported)
 local function createUser(username, password)
-    
     if type(username) ~= "string" then
         return nil, 'Wrong username type. Expected string, got '..tostring(type(username))
     end
@@ -115,20 +143,18 @@ local function createUser(username, password)
         return nil, 'Wrong password type. Expected string, got '..tostring(type(password))
     end
 
-    local users = db.users
-    for _, usr in pairs(users) do
+    for _, usr in pairs(db.users) do
         if usr.username == username then
-            return nil, 'Same user is already exist.' 
+            return nil, 'Same user is already exist.'
         end
     end
 
     local id = db.nextids.user + 1
 
     local user = {}
-
     user.username = username
     user.password = sha2.sha256(password)
-    user.token = nil --  generateToken()
+    user.tokens = {}         --  multiple tokens
     user.timestamp = os.time()
     user.loginHistory = {}
     user.userid = id
@@ -144,12 +170,11 @@ local function createUser(username, password)
     user.background = ''    -- link
     user.blurBackground = true
 
-    table.insert(db.users, user)   
+    table.insert(db.users, user)
     db.nextids.user = id
 
     onUserRegisteredFire(sc(user))
     return user
-
 end
 
 local function loginUser(username, password, req, res)
@@ -159,47 +184,91 @@ local function loginUser(username, password, req, res)
         if user.username == username then
             local loginHistory = {}
             loginHistory.timestamp = os.time()
-            loginHistory.address = (req and req.socket:address().ip) or 'unknown'
+            loginHistory.address = (req and req.socket and req.socket.address and req.socket:address().ip) or 'unknown'
             loginHistory.successful = false
 
             if user.password == hash then
                 loginHistory.successful = true
                 table.insert(user.loginHistory, loginHistory)
-                
+
                 onUserLogInFire(sc(user))
-                local token = generateToken()
-                user.token = token
-                return token
+
+                local tokenStr = generateToken()
+                local tokenRecord = {
+                    token = tokenStr,
+                    issuedAt = os.time(),
+                    ip = (req and req.socket and req.socket.address and req.socket:address().ip) or 'unknown',
+                    device = (req and req.headers and (req.headers['user-agent'] or req.headers['User-Agent'])) or 'unknown'
+                }
+
+                if type(user.tokens) ~= "table" then user.tokens = {} end
+
+                table.insert(user.tokens, tokenRecord)
+
+                return tokenStr
             else
                 table.insert(user.loginHistory, loginHistory)
                 return nil, 'Wrong password'
             end
         end
     end
-    
+
+    return nil, 'User not found'
 end
 
+
 local function logoutUser(token)
+    if not token then return false end
+
     for _, user in pairs(db.users) do
-        if user.token == token then
-            user.token = nil
-            niko:Log("User logged out: " .. user.username, "Core", "INFO", 2)
-            return true
+        if type(user.tokens) == "table" then
+            for i = #user.tokens, 1, -1 do
+                if user.tokens[i] and user.tokens[i].token == token then
+                    table.remove(user.tokens, i)
+                    niko:Log("Token revoked for user: " .. user.username, "Core", "INFO", 2)
+                    return true
+                end
+            end
         end
     end
+
     return false
 end
 
+local function revokeAllTokensForUser(userid)
+    local user = core.getUserById(userid)
+    if not user then return nil, 'User not found' end
+    user.tokens = {}
+    return true
+end
+
+local function listTokensForUser(userid)
+    local user = core.getUserById(userid)
+    if not user then return nil, 'User not found' end
+    return user.tokens or {}
+end
+
+local function revokeToken(token)
+    return logoutUser(token)
+end
+
+
 local function getUserByToken(token)
-    
-    for k, user in pairs(db.users) do
-        -- print(k, user, user.username)
-        if user.token == token then
-            return user
+    if not token then return nil end
+
+    for _, user in pairs(db.users) do
+        if type(user.tokens) == "table" then
+            for _, tokrec in ipairs(user.tokens) do
+                if tokrec and tokrec.token == token then
+                    return user, tokrec
+                end
+            end
         end
     end
 
+    return nil
 end
+
 
 local function getUserById(id)
     for k, user in pairs(db.users) do
@@ -498,7 +567,7 @@ function core.loginUser(...)
 end
 
 function core.logoutUser(...)
-    return logoutUser()
+    return logoutUser(...)
 end
 
 function core.getUserByUsername(...)
@@ -566,6 +635,19 @@ function core:getService(sn)
     return services.GetService(sn)
 end
 
+function core.revokeAllTokensForUser(...)
+    return revokeAllTokensForUser(...)
+end
+
+function core.listTokensForUser(...)
+    return listTokensForUser(...)
+end
+
+function core.revokeToken(...)
+    return revokeToken(...)
+end
+
+
 local adminRole = getRoleById(1)
 if not adminRole then
     createRole('Administrator')
@@ -573,6 +655,47 @@ end
 timer.setInterval(1*1000, function()
     saveDB()
 end)
+
+-- aliases
+core.Events = core.events
+
+-- services: make things easier and readable. Roblox ahh services.  
+-- Test Service - you can remove it if it hurts yo eyes :p
+services.NewService('TestService', {
+
+    Test = function (self, param)
+        
+        print('TEST: '..tostring(param))
+
+    end
+
+})
+
+-- UserService - Manipulate users data
+services.NewService('UserService', {
+
+    GetUserById = function (self, id)
+        return getUserById(id)
+    end,
+
+    GetUserByToken = function (self, token)
+        return getUserByToken(token) -- returns user, tokenRecord
+    end,
+
+    GetUserTokens = function (self, userid)
+        return listTokensForUser(userid)
+    end,
+
+    RevokeToken = function (self, token)
+        return revokeToken(token)
+    end,
+
+    RevokeAllTokensForUser = function (self, userid)
+        return revokeAllTokensForUser(userid)
+    end
+
+})
+
 
 
 return core
